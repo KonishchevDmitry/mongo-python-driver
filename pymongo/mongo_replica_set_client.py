@@ -1322,7 +1322,7 @@ class MongoReplicaSetClient(common.BaseObject):
             if member and sock_info:
                 member.pool.maybe_return_socket(sock_info)
 
-    def __check_response_to_last_error(self, response):
+    def __check_response_to_last_error(self, response, wtimeout_is_error=True):
         """Check a response to a lastError message for errors.
 
         `response` is a byte string representing a response to the message.
@@ -1338,7 +1338,10 @@ class MongoReplicaSetClient(common.BaseObject):
         helpers._check_command_response(error, self.disconnect)
 
         error_msg = error.get("err", "")
-        if error_msg is None:
+        if error_msg is None or (
+            not wtimeout_is_error and error["ok"]
+            and error_msg == "timeout" and error["wtimeout"]
+        ):
             return error
         if error_msg.startswith("not master"):
             self.disconnect()
@@ -1403,8 +1406,8 @@ class MongoReplicaSetClient(common.BaseObject):
         # don't include BSON documents.
         return msg
 
-    def _send_message(self, msg,
-                      with_last_error=False, _connection_to_use=None):
+    def _send_message(self, msg, with_last_error=False,
+                      _connection_to_use=None, wtimeout_is_error=True):
         """Say something to Mongo.
 
         Raises ConnectionFailure if the message cannot be sent. Raises
@@ -1440,7 +1443,8 @@ class MongoReplicaSetClient(common.BaseObject):
                 rv = None
                 if with_last_error:
                     response = self.__recv_msg(1, rqst_id, sock_info)
-                    rv = self.__check_response_to_last_error(response)
+                    rv = self.__check_response_to_last_error(
+                        response, wtimeout_is_error=wtimeout_is_error)
                 return rv
             except OperationFailure:
                 raise
