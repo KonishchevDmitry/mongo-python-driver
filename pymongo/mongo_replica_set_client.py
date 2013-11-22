@@ -641,6 +641,7 @@ class MongoReplicaSetClient(common.BaseObject):
         """
         self.__opts = {}
         self.__seeds = set()
+        self.__last_seeds = set()
         self.__index_cache = {}
         self.__auth_credentials = {}
 
@@ -1127,6 +1128,7 @@ class MongoReplicaSetClient(common.BaseObject):
             # Try first those hosts we think are up, then the down ones.
             nodes = sorted(
                 rs_state.hosts, key=lambda host: rs_state.get(host).up)
+            nodes.extend(self.__last_seeds - set(nodes))
         else:
             nodes = self.__seeds
 
@@ -1186,11 +1188,10 @@ class MongoReplicaSetClient(common.BaseObject):
                     member.pool.discard_socket(sock_info)
                 errors.append("%s:%d: %s" % (node[0], node[1], str(why)))
             if hosts:
+                self.__last_seeds = set(hosts)
                 break
         else:
             if errors:
-                if rs_state.hosts:
-                    self.__rs_state = RSState(self.__make_threadlocal())
                 raise AutoReconnect(', '.join(errors))
             raise ConfigurationError('No suitable hosts found')
 
